@@ -43,82 +43,88 @@
       src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
+      defer
     ></script>
   </head>
 
   <body>
-    <div>
-      <div class="gn"><h2>Custom Leaflet Map</h2></div>
-    </div>
-    <div class="gn">
-      <div id="map"></div>
-    </div>
+    <div class="gn"><h2>Custom Leaflet Map</h2></div>
+    <div class="gn"><div id="map"></div></div>
 
     <script>
-      // Initialize map with center and zoom
-      var map = L.map("map", {
-        minZoom: 3,
-        maxZoom: 19,
-        worldCopyJump: true, // allow horizontal scrolling wrap
-      }).setView([20.5937, 78.9629], 4); // Centered on India
+      document.addEventListener("DOMContentLoaded", () => {
+        // Initialize map
+        var map = L.map("map", {
+          minZoom: 3,
+          maxZoom: 10,
+          worldCopyJump: true,
+        }).setView([20.5937, 78.9629], 4);
 
-      // Add OpenStreetMap layer
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution:
-          '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      }).addTo(map);
+        // Add OpenStreetMap layer
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution:
+            '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+          minZoom: 3,
+          maxZoom: 10,
+        }).addTo(map);
 
-      // Limit map bounds (prevent moving beyond world edges vertically)
-      var southWest = L.latLng(-85, -180),
-        northEast = L.latLng(85, 180);
-      var bounds = L.latLngBounds(southWest, northEast);
-      map.setMaxBounds(bounds);
-      map.on("drag", function () {
-        map.panInsideBounds(bounds, { animate: false });
-      });
-
-      // Define marker data
-      var locations = [
-        { name: "Delhi", coords: [28.61, 77.21] },
-        { name: "Mumbai", coords: [19.08, 72.88] },
-        { name: "Chennai", coords: [13.08, 80.27] },
-        { name: "Bengaluru", coords: [12.97, 77.59] },
-        { name: "Kolkata", coords: [22.33, 88.25] },
-      ];
-
-      // Create markers and store them for click checking
-      var markers = [];
-      locations.forEach((loc) => {
-        var marker = L.marker(loc.coords)
-          .addTo(map)
-          .bindPopup("<b>We are available in " + loc.name + "</b>");
-        markers.push(marker);
-      });
-
-      var popup = L.popup();
-
-      // Handle clicks only when not on a marker
-      map.on("click", function (e) {
-        var clickedOnMarker = false;
-
-        markers.forEach((marker) => {
-          var markerLatLng = marker.getLatLng();
-          var distance = e.latlng.distanceTo(markerLatLng);
-          if (distance < 50000) {
-            // 50km radius tolerance
-            clickedOnMarker = true;
-          }
+        // Limit map bounds
+        var southWest = L.latLng(-85, -180),
+          northEast = L.latLng(85, 180);
+        var bounds = L.latLngBounds(southWest, northEast);
+        map.setMaxBounds(bounds);
+        map.on("drag", function () {
+          map.panInsideBounds(bounds, { animate: false });
         });
 
-        if (!clickedOnMarker) {
-          popup
-            .setLatLng(e.latlng)
-            .setContent(
-              "Currently, we are not available here...<br>We will be available soon."
-            )
-            .openOn(map);
-        }
+        // Marker data
+        var locations = [
+          { name: "Delhi", coords: [28.61, 77.21] },
+          { name: "Mumbai", coords: [19.08, 72.88] },
+          { name: "Chennai", coords: [13.08, 80.27] },
+          { name: "Bengaluru", coords: [12.97, 77.59] },
+          { name: "Kolkata", coords: [22.33, 88.25] },
+        ];
+
+        // Create markers
+        var markers = [];
+        locations.forEach((loc) => {
+          var marker = L.marker(loc.coords)
+            .addTo(map)
+            .bindPopup("<b>We are available in " + loc.name + "</b>");
+          markers.push(marker);
+        });
+
+        var popup = L.popup();
+
+        // Handle map clicks
+        map.on("click", function (e) {
+          var clickedOnMarker = markers.some(
+            (marker) => e.latlng.distanceTo(marker.getLatLng()) < 50000
+          );
+
+          if (!clickedOnMarker) {
+            popup
+              .setLatLng(e.latlng)
+              .setContent(
+                "Currently, we are not available here...<br>We will be available soon."
+              )
+              .openOn(map);
+          }
+        });
       });
+    </script>
+
+    <!-- Register the Service Worker -->
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker
+          .register("service-worker.js")
+          .then(() => console.log("Service Worker registered"))
+          .catch((err) =>
+            console.error("Service Worker registration failed:", err)
+          );
+      }
     </script>
   </body>
 </html>
