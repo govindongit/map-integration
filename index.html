@@ -14,14 +14,29 @@
       html,
       body {
         height: 100%;
+        width: 100%;
         margin: 0;
         padding: 0;
+      }
+      .gn {
+        display: flex;
+        justify-content: center;
+        align-items: center;
       }
 
       #map {
         width: 90vw;
-        height: 90vh;
-        text-align: center;
+        height: 80vh;
+        max-width: 1200px;
+        max-height: 800px;
+        border: 2px solid #ccc;
+        border-radius: 10px;
+      }
+      @media (max-width: 600px) {
+        #map {
+          width: 95vw;
+          height: 80vh;
+        }
       }
     </style>
     <script
@@ -32,7 +47,10 @@
   </head>
 
   <body>
-    <div style="text-align: center">
+    <div>
+      <div class="gn"><h2>Custom Leaflet Map</h2></div>
+    </div>
+    <div class="gn">
       <div id="map"></div>
     </div>
 
