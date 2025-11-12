@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Leaflet + GeoJSON Map (city & country via reverse geocode)</title>
+
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <style>
+      html,
+      body {
+        height: 100%;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+        background: #f8f9fb;
+      }
+      .gn {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      h2 {
+        margin: 14px 0;
+        color: #222;
+      }
+      #map {
+        width: 92vw;
+        height: 80vh;
+        max-width: 1200px;
+        max-height: 820px;
+        border-radius: 10px;
+        box-shadow: 0 6px 18px rgba(25, 40, 70, 0.08);
+        border: 1px solid #dfe6ef;
+      }
+    </style>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+      defer
+    ></script>
+  </head>
+
+  <body>
+    <div class="gn"><h2>Leaflet + GeoJSON Map</h2></div>
+    <div class="gn"><div id="map"></div></div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", async () => {
+        // --- Map init ---
+        const map = L.map("map", {
+          minZoom: 2,
+          maxZoom: 10,
+          worldCopyJump: true,
+        }).setView([20.5937, 78.9629], 4);
+
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: "&copy; OpenStreetMap contributors",
+        }).addTo(map);
+
+        // --- Markers (your brand presence) ---
+        const locations = [
+          { name: "Delhi", coords: [28.61, 77.21] },
+          { name: "Mumbai", coords: [19.08, 72.88] },
+          { name: "Bengaluru", coords: [12.97, 77.59] },
+          { name: "Kolkata", coords: [22.33, 88.25] },
+          { name: "Abu Dhabi", coords: [24.4539, 54.3773] },
+        ];
+
+        // create markers and keep references (map city name lowercase -> marker)
+        const markerMap = new Map();
+        const markers = locations.map((loc) => {
+          const m = L.marker(loc.coords)
+            .addTo(map)
+            .bindPopup(`<b>We are available in ${loc.name}</b>`);
+          markerMap.set(loc.name.toLowerCase(), m);
+          return m;
+        });
+
+        // --- Clickable countries (only these countries will respond to clicks) ---
+        const clickableCountries = [
+          "India",
+          "Nepal",
+          "Sri Lanka",
+          "United Arab Emirates",
+        ];
+
+        // --- Load GeoJSON country polygons ---
+        // (You can swap to a simplified GeoJSON for production.)
+        const geoJsonUrl =
+          "https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson";
+
+        try {
+          const resp = await fetch(geoJsonUrl);
+          if (!resp.ok) throw new Error("GeoJSON fetch failed: " + resp.status);
+          const geojson = await resp.json();
+
+          function defaultStyle() {
+            return {
+              color: "#4a5568",
+              weight: 0.7,
+              fillColor: "#9fb3c8",
+              fillOpacity: 0.06,
+            };
+          }
+          function highlightStyle() {
+            return {
+              color: "#2b6cb0",
+              weight: 1.2,
+              fillColor: "#2b6cb0",
+              fillOpacity: 0.12,
+            };
+          }
+
+          L.geoJSON(geojson, {
+            style: defaultStyle,
+            onEachFeature: (feature, layer) => {
+              const countryName =
+                feature.properties.ADMIN ||
+                feature.properties.name ||
+                feature.properties.NAME ||
+                "Unknown";
+
+              // If country is in the allowed list, make it interactive
+              if (clickableCountries.includes(countryName)) {
+                layer.on({
+                  mouseover: () => layer.setStyle(highlightStyle()),
+                  mouseout: () => layer.setStyle(defaultStyle()),
+                  click: async (e) => {
+                    // Reverse geocode clicked lat/lon using Nominatim (OpenStreetMap)
+                    const lat = e.latlng.lat;
+                    const lon = e.latlng.lng;
+
+                    // Build URL: format=jsonv2 & addressdetails=1 for structured address fields
+                    const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(
+                      lat
+                    )}&lon=${encodeURIComponent(lon)}&addressdetails=1`;
+
+                    try {
+                      const r = await fetch(nominatimUrl, {
+                        // Note: browsers don't let us set User-Agent; consider adding &email=you@domain.com if heavy usage.
+                        headers: { "Accept-Language": "en" },
+                      });
+                      if (!r.ok)
+                        throw new Error("Reverse geocode failed: " + r.status);
+                      const data = await r.json();
+
+                      // address object has fields like city, town, village, county, state, country
+                      const addr = data.address || {};
+
+                      // pick city-like label: city > town > village > hamlet > county > state
+                      const city =
+                        addr.city ||
+                        addr.town ||
+                        addr.village ||
+                        addr.hamlet ||
+                        addr.county ||
+                        null;
+                      const country = addr.country || countryName || null;
+
+                      // If no city-like label or not enough address info, assume click is on ocean/remote; do nothing
+                      if (!city || !country) {
+                        // no popup for water / no-address clicks
+                        return;
+                      }
+
+                      const cityLower = city.toString().toLowerCase();
+
+                      // If we already have a marker for this city (exact match by name), open it
+                      if (markerMap.has(cityLower)) {
+                        const marker = markerMap.get(cityLower);
+                        marker.openPopup();
+                        // Also pan to marker for clarity (optional)
+                        map.panTo(marker.getLatLng());
+                        return;
+                      }
+
+                      // Otherwise show "not available" popup with city and country
+                      L.popup()
+                        .setLatLng(e.latlng)
+                        .setContent(
+                          `<b>Currently, we are not available in ${city}, ${country}.</b><br>We will be available soon.`
+                        )
+                        .openOn(map);
+                    } catch (err) {
+                      // Reverse geocode failed — avoid showing anything (no popup)
+                      console.error("Reverse geocode error:", err);
+                    }
+                  },
+                });
+              } else {
+                // Non-clickable countries: clicks pass through (no popup)
+                layer.options.interactive = false;
+              }
+            },
+          }).addTo(map);
+        } catch (err) {
+          console.error("Failed to load GeoJSON:", err);
+        }
+
+        // Map clicks outside polygons do nothing (no popup) — keeps ocean clicks silent.
+      });
+    </script>
+  </body>
+</html>
